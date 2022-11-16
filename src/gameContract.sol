@@ -12,16 +12,25 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
     event gameStarted (uint _gameID, uint _maxPlayers, uint _entryFee);
     event playerJoined (uint gameID, address player, uint stake);
 
+    event RequestSent(uint256 requestId, uint32 numWords);
+    event RequestFulfilled(uint256 requestId, uint256[] randomWords);
+
     uint gameId = 1;
     struct game{
         bool started;
         uint maxPlayers;
         uint entryFee;
         uint playerCount;
+        uint totalStake;
+    }
+
+    struct players {
+        address player;
+        uint stake;
     }
 
     mapping (uint => game) gameDetails;
-    mapping (uint => mapping (address => uint)) playerStake;
+    mapping (uint => mapping (uint => players)) playerDetails;
 
     VRFCoordinatorV2Interface COORDINATOR;
 
@@ -58,9 +67,6 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
     uint256[] public requestIds;
     uint256 public lastRequestId;
 
-    event RequestSent(uint256 requestId, uint32 numWords);
-    event RequestFulfilled(uint256 requestId, uint256[] randomWords);
-
     constructor (uint64 _subscriptionID) 
     VRFConsumerBaseV2(0x2Ca8E0C643bDe4C2E08ab1fA0da3401AdAD7734D)//HARDCODED FOR GOERLI
     ConfirmedOwner(msg.sender){
@@ -81,6 +87,7 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
         gameDetails[gameId].started = true;
         gameDetails[gameId].maxPlayers = _maxPlayers;
         gameDetails[gameId].entryFee = _entryFee;
+        gameDetails[gameId].playerCount = 1;
 
         emit gameStarted(gameID, gameDetails[gameId].maxPlayers, gameDetails[gameId].entryFee);
 
@@ -90,26 +97,42 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
     function joinGame (uint _gameID) external payable {
         require(gameDetails[_gameID].started == true, "Game hasn't Started Yet!");
         require(gameDetails[_gameID].playerCount <= gameDetails[_gameID].maxPlayers);
+        
         require(msg.value >= gameDetails[_gameID].entryFee);
 
+        gameDetails[_gameID].totalStake += msg.value;
+        playerDetails[_gameID][gameDetails[_gameID].playerCount].player = msg.sender;
+        playerDetails[_gameID][gameDetails[_gameID].playerCount].stake = msg.value;
+
+        if(gameDetails[_gameID].playerCount == maxPlayers){
+            getWinner(_gameID);
+        }
+
         gameDetails[_gameID].playerCount++;
-        playerStake[_gameID][msg.sender] = msg.value;
 
         emit playerJoined(_gameID, msg.sender, msg.value);
     }
 
-    function seePlayerStake (uint _gameId) public view returns (address player, uint stake){
-        require(playerStake[_gameId][msg.sender] > 0);
-        (player, stake) = (msg.sender, playerStake[_gameId][msg.sender]);
+    function seeGameDetails (uint _gameId) public view returns (address [] player, uint [] stake){
+        for (uint i = 1; i <= gameDetails[_gameID].playerCount; i++){
+            (player, stake) = (playerDetails[_gameId][i].player, playerDetails[_gameId][i].stake);
+        }
+    }
+
+    function getWinner (uint _gameID) internal returns (uint winningLot) {
+        requestRandomWords();
+        winningLot = (lastRequestId % gameDetails[_gameID].maxPlayers) + 1;
+        address winner = playerDetails[_gameID][winningLot].player;
+        winner.transfer(gameDetails[_gameID].totalStake);
     }
 
 
-    //////////////////////////////////////
-    ////////// VRF HELPER FUNCTIONS //////
-    /////////////////////////////////////
+                    /////////////////////////////////////
+                    ////////// VRF HELPER FUNCTIONS /////
+                    /////////////////////////////////////
 
 
-    function requestRandomWords() external onlyOwner returns (uint requestID) {
+    function requestRandomWords() internal returns (uint requestID) {
         // Will revert if subscription is not set and funded.
         requestId = COORDINATOR.requestRandomWords(
             keyHash,
@@ -127,22 +150,5 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
         lastRequestId = requestId;
         emit RequestSent(requestId, numWords);
         return requestId;
-    }
-    function fulfillRandomWords(
-        uint256 _requestId,
-        uint256[] memory _randomWords
-    ) internal override {
-        require(s_requests[_requestId].exists, "request not found");
-        s_requests[_requestId].fulfilled = true;
-        s_requests[_requestId].randomWords = _randomWords;
-        emit RequestFulfilled(_requestId, _randomWords);
-    }
-
-    function getRequestStatus(
-        uint256 _requestId
-    ) external view returns (bool fulfilled, uint256[] memory randomWords) {
-        require(s_requests[_requestId].exists, "request not found");
-        RequestStatus memory request = s_requests[_requestId];
-        return (request.fulfilled, request.randomWords);
     }
 }
