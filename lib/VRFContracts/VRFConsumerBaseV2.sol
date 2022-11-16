@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.4;
+pragma solidity ^0.8.0;
 
 /** ****************************************************************************
  * @notice Interface for contracts using VRF randomness
@@ -95,7 +95,7 @@ pragma solidity ^0.8.4;
  * @dev and so remains effective only in the case of unmodified oracle software).
  */
 abstract contract VRFConsumerBaseV2 {
-  error OnlyCoordinatorCanFulfill(address have, address want);
+  error OnlyCoordinatorCanFulfill (address have, address want);
   address private immutable vrfCoordinator;
 
   /**

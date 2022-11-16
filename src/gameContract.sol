@@ -98,8 +98,9 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
         emit playerJoined(_gameID, msg.sender, msg.value);
     }
 
-    function seePlayersStake (uint _gameId) public view returns (address [] player, uint [] stake){
-        
+    function seePlayerStake (uint _gameId) public view returns (address player, uint stake){
+        require(playerStake[_gameId][msg.sender] > 0);
+        (player, stake) = (msg.sender, playerStake[_gameId][msg.sender]);
     }
 
 
