@@ -44,9 +44,9 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
     // function.
     uint32 callbackGasLimit = 100000;
 
-    // For this example, retrieve 2 random values in one request.
+    // For this example, retrieve 1 random values in one request.
     // Cannot exceed VRFCoordinatorV2.MAX_NUM_WORDS.
-    uint32 numWords = 2;
+    uint32 numWords = 1;
 
     struct RequestStatus {
         bool fulfilled; // whether the request has been successfully fulfilled
