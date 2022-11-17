@@ -63,6 +63,9 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
         uint256[] randomWords;
     }
 
+    mapping(uint256 => RequestStatus)
+        public s_requests; /* requestId --> requestStatus */
+
     // past requests Id.
     uint256[] public requestIds;
     uint256 public lastRequestId;
@@ -71,7 +74,7 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
     VRFConsumerBaseV2(0x2Ca8E0C643bDe4C2E08ab1fA0da3401AdAD7734D)//HARDCODED FOR GOERLI
     ConfirmedOwner(msg.sender){
 
-        COORDINATOR = VRFConsumerBaseV2(0x2Ca8E0C643bDe4C2E08ab1fA0da3401AdAD7734D);
+        COORDINATOR = VRFCoordinatorV2Interface(0x2Ca8E0C643bDe4C2E08ab1fA0da3401AdAD7734D);
 
         s_subscriptionId = _subscriptionID;
     }
@@ -89,7 +92,7 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
         gameDetails[gameId].entryFee = _entryFee;
         gameDetails[gameId].playerCount = 1;
 
-        emit gameStarted(gameID, gameDetails[gameId].maxPlayers, gameDetails[gameId].entryFee);
+        emit gameStarted(gameId, gameDetails[gameId].maxPlayers, gameDetails[gameId].entryFee);
 
         gameId++;
     }
@@ -104,7 +107,7 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
         playerDetails[_gameID][gameDetails[_gameID].playerCount].player = msg.sender;
         playerDetails[_gameID][gameDetails[_gameID].playerCount].stake = msg.value;
 
-        if(gameDetails[_gameID].playerCount == maxPlayers){
+        if(gameDetails[_gameID].playerCount == gameDetails[_gameID].maxPlayers){
             getWinner(_gameID);
         }
 
@@ -113,9 +116,9 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
         emit playerJoined(_gameID, msg.sender, msg.value);
     }
 
-    function seeGameDetails (uint _gameId) public view returns (address [] player, uint [] stake){
-        for (uint i = 1; i <= gameDetails[_gameID].playerCount; i++){
-            (player, stake) = (playerDetails[_gameId][i].player, playerDetails[_gameId][i].stake);
+    function seeGameDetails (uint _gameId) public view returns (address[] memory player, uint[] memory stake){
+        for (uint i = 1; i <= gameDetails[_gameId].playerCount; i++){
+            (player[i], stake[i]) = (playerDetails[_gameId][i].player, playerDetails[_gameId][i].stake);
         }
     }
 
@@ -123,7 +126,7 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
         requestRandomWords();
         winningLot = (lastRequestId % gameDetails[_gameID].maxPlayers) + 1;
         address winner = playerDetails[_gameID][winningLot].player;
-        winner.transfer(gameDetails[_gameID].totalStake);
+        payable(winner).transfer(gameDetails[_gameID].totalStake);
     }
 
 
@@ -132,7 +135,7 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
                     /////////////////////////////////////
 
 
-    function requestRandomWords() internal returns (uint requestID) {
+    function requestRandomWords() internal returns (uint requestId) {
         // Will revert if subscription is not set and funded.
         requestId = COORDINATOR.requestRandomWords(
             keyHash,
@@ -150,5 +153,23 @@ contract gameContract is VRFConsumerBaseV2, ConfirmedOwner{
         lastRequestId = requestId;
         emit RequestSent(requestId, numWords);
         return requestId;
+    }
+
+        function fulfillRandomWords(
+        uint256 _requestId,
+        uint256[] memory _randomWords
+    ) internal override {
+        require(s_requests[_requestId].exists, "request not found");
+        s_requests[_requestId].fulfilled = true;
+        s_requests[_requestId].randomWords = _randomWords;
+        emit RequestFulfilled(_requestId, _randomWords);
+    }
+
+    function getRequestStatus(
+        uint256 _requestId
+    ) external view returns (bool fulfilled, uint256[] memory randomWords) {
+        require(s_requests[_requestId].exists, "request not found");
+        RequestStatus memory request = s_requests[_requestId];
+        return (request.fulfilled, request.randomWords);
     }
 }
